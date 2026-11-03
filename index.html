@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="description" content="Balloon Pop — pop rising balloons, chain blasts, clock bonuses and combo multipliers in 60 seconds. Free HTML5 arcade game.">
+<title>Balloon Pop — Pop, Combo, Beat the Clock</title>
+<script>
+// 平台 SDK 按域名条件加载（独立运行时完全不加载，游戏行为不变）
+(function () {
+  var host = location.hostname || "";
+  try {
+    if (host.indexOf("crazygames") !== -1) {
+      var s1 = document.createElement("script");
+      s1.src = "https://sdk.crazygames.com/crazygames-sdk-v3.js";
+      s1.onload = function () {
+        if (window.CrazyGames && window.CrazyGames.SDK) {
+          window.CrazyGames.SDK.init().then(function () {
+            try { window.CrazyGames.SDK.game.loadingStart(); } catch (e) {}
+            window.addEventListener("load", function () { try { window.CrazyGames.SDK.game.loadingStop(); } catch (e) {} });
+          }).catch(function () {});
+        }
+      };
+      document.head.appendChild(s1);
+      window.__portal = "crazygames";
+    } else if (host.indexOf("gamedistribution") !== -1 || host.indexOf("html5.gamedistribution.com") !== -1 || host.indexOf("gd.games") !== -1) {
+      var s2 = document.createElement("script");
+      s2.src = "https://sdk.gamedistribution.com/v2/main.min.js";
+      document.head.appendChild(s2);
+      window.__portal = "gamedistribution";
+    }
+  } catch (e) {}
+})();
+</script>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { height:100%; overflow:hidden; background:#8fd0ff; font-family:-apple-system,"Segoe UI","Helvetica Neue",Arial,sans-serif; }
+  #wrap { height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+  #hud { width:100%; max-width:520px; display:flex; justify-content:space-around; padding:6px 10px 2px; }
+  .stat { text-align:center; min-width:60px; }
+  .stat .label { font-size:10px; color:#2b5d8f; letter-spacing:1.5px; font-weight:800; }
+  .stat .val { font-size:20px; font-weight:900; color:#12365c; }
+  #toolbar { width:100%; max-width:520px; display:flex; justify-content:space-between; align-items:center; padding:0 14px 6px; }
+  #title { font-size:13px; font-weight:900; color:#1d5d9e; letter-spacing:3px; }
+  .ghost { background:rgba(255,255,255,.78); color:#1d5d9e; border:1px solid #9cc8ee; border-radius:8px; padding:4px 12px; font-size:11px; font-weight:800; letter-spacing:1px; cursor:pointer; font-family:inherit; }
+  .ghost:active { transform:scale(.96); }
+  #stage { position:relative; }
+  canvas { display:block; border-radius:14px; touch-action:none; box-shadow:0 12px 30px rgba(20,60,110,.35); }
+  #overlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(15,40,80,.55); backdrop-filter:blur(3px); z-index:5; border-radius:14px; overflow:auto; }
+  #overlay.hidden { display:none; }
+  .panel { background:#f4fbff; border:1px solid #bfe0f7; border-radius:18px; padding:24px 26px 20px; text-align:center; color:#12365c; width:min(86%,330px); max-height:94%; overflow:auto; box-shadow:0 14px 40px rgba(10,40,80,.4); }
+  .panel h1 { font-size:26px; letter-spacing:3px; color:#ff5f6e; margin-bottom:6px; }
+  .panel h2 { font-size:22px; letter-spacing:1px; color:#12365c; margin-bottom:6px; }
+  .panel .sub { color:#4a7099; font-size:12px; line-height:1.65; margin-bottom:14px; }
+  .panel .final { font-size:40px; font-weight:900; color:#ff8a2a; margin:2px 0 8px; }
+  .bigbtn { background:linear-gradient(135deg,#ff5f6e,#ff8a2a); color:#fff; border:none; border-radius:12px; padding:12px 42px; font-size:17px; font-weight:900; letter-spacing:2px; cursor:pointer; font-family:inherit; box-shadow:0 6px 16px rgba(255,95,110,.45); }
+  .bigbtn:active { transform:scale(.96); }
+  .best-line { margin-top:12px; font-size:12px; color:#4a7099; font-weight:700; letter-spacing:1px; }
+  .best-line b { color:#12365c; font-size:15px; }
+  #newBest { display:none; background:#ffd76a; color:#7a4c00; border-radius:20px; padding:3px 14px; font-size:11px; font-weight:900; letter-spacing:1px; margin-bottom:8px; }
+  #footer { color:#3d6d9e; font-size:11px; padding:6px; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="hud">
+    <div class="stat"><div class="label">SCORE</div><div class="val" id="score">0</div></div>
+    <div class="stat"><div class="label">TIME</div><div class="val" id="time">60</div></div>
+    <div class="stat"><div class="label">COMBO</div><div class="val" id="combo">×1</div></div>
+    <div class="stat"><div class="label">BEST</div><div class="val" id="best">0</div></div>
+  </div>
+  <div id="toolbar">
+    <div id="title">BALLOON POP</div>
+    <button class="ghost" id="muteBtn">SOUND ON</button>
+  </div>
+  <div id="stage">
+    <canvas id="game"></canvas>
+    <div id="overlay">
+      <div class="panel" id="menuPanel">
+        <h1>BALLOON POP</h1>
+        <p class="sub">
+          Pop balloons before they float away!<br>
+          Big = 1pt &middot; Small = 3pt &middot; Gold = 5pt<br>
+          Chain ball blasts nearby balloons &middot; Clock ball +3s<br>
+          Avoid spike balls (&minus;5) &middot; Bees steal balloons<br>
+          Tap or hold &amp; swipe to pop &middot; Combo up to &times;3
+        </p>
+        <button class="bigbtn" id="playBtn">PLAY</button>
+        <p class="best-line">BEST SCORE: <b id="menuBest">0</b></p>
+      </div>
+      <div class="panel" id="overPanel" style="display:none">
+        <h2>Time's Up!</h2>
+        <span id="newBest">NEW BEST!</span>
+        <div class="final" id="finalScore">0</div>
+        <p class="sub" id="overStats"></p>
+        <button class="bigbtn" id="againBtn">PLAY AGAIN</button>
+        <p class="best-line">BEST SCORE: <b id="overBest">0</b></p>
+      </div>
+    </div>
+  </div>
+  <div id="footer">Balloon Pop — a free balloon popping arcade game</div>
+</div>
+<script>
+"use strict";
+// ---------- 画布（自适应缩放，逻辑坐标固定 480x720） ----------
+var W = 480, H = 720;
+var canvas = document.getElementById("game");
+var ctx = canvas.getContext("2d");
+var dpr = Math.min(window.devicePixelRatio || 1, 2);
+canvas.width = W * dpr; canvas.height = H * dpr;
+ctx.scale(dpr, dpr);
+
+function el(id) { return document.getElementById(id); }
+function fit() {
+  var hudH = el("hud").offsetHeight, barH = el("toolbar").offsetHeight, footH = el("footer").offsetHeight;
+  var availW = Math.min(window.innerWidth - 8, 520);
+  var availH = window.innerHeight - hudH - barH - footH - 14;
+  var s = Math.min(availW / W, availH / H);
+  s = Math.max(0.4, Math.min(s, 1.25));
+  canvas.style.width = Math.round(W * s) + "px";
+  canvas.style.height = Math.round(H * s) + "px";
+}
+window.addEventListener("resize", fit);
+window.addEventListener("orientationchange", function () { setTimeout(fit, 200); });
+
+// ---------- 状态 ----------
+var state = "MENU";        // MENU | PLAY | OVER
+var score = 0, best = 0, bestCombo = 0, prevBest = 0, gameBestCombo = 0;
+var combo = 0, mult = 1;
+var timeLeft = 60, elapsed = 0;
+var balloons = [], spikes = [], bees = [], parts = [], floats = [], rings = [], blasts = [];
+var spawnT = 0, spikeT = 0, beeT = 0, ambientT = 0.5, shakeT = 0;
+var muted = false;
+try { best = parseInt(localStorage.getItem("bp_best") || "0", 10) || 0; } catch (e) {}
+try { bestCombo = parseInt(localStorage.getItem("bp_bestCombo") || "0", 10) || 0; } catch (e) {}
+try { muted = localStorage.getItem("bp_muted") === "1"; } catch (e) {}
+
+var HUES = [350, 25, 145, 205, 265, 320];
+
+// ---------- 平台埋点（SDK 已做域名守卫，其他域为空操作） ----------
+function portalStart() {
+  try {
+    if (window.__portal === "crazygames" && window.CrazyGames && window.CrazyGames.SDK) {
+      window.CrazyGames.SDK.game.gameplayStart();
+    }
+  } catch (e) {}
+}
+function portalStop(happy) {
+  try {
+    if (window.__portal === "crazygames" && window.CrazyGames && window.CrazyGames.SDK) {
+      window.CrazyGames.SDK.game.gameplayStop();
+      if (happy) window.CrazyGames.SDK.game.happytime();
+    }
+  } catch (e) {}
+}
+
+// ---------- 音效（WebAudio 合成，静音开关） ----------
+var actx = null, noiseBuf = null;
+function ensureAudio() {
+  try {
+    if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+    if (actx.state === "suspended") actx.resume();
+  } catch (e) {}
+}
+function beep(freq, dur, type, gainv, delay, slideTo) {
+  if (muted) return;
+  try {
+    ensureAudio(); if (!actx) return;
+    var t0 = actx.currentTime + (delay || 0);
+    var o = actx.createOscillator(), g = actx.createGain();
+    o.type = type || "sine";
+    o.frequency.setValueAtTime(freq, t0);
+    if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t0 + dur);
+    g.gain.setValueAtTime(gainv || 0.1, t0);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+    o.connect(g); g.connect(actx.destination);
+    o.start(t0); o.stop(t0 + dur + 0.02);
+  } catch (e) {}
+}
+function noise(dur, gainv, delay, freq) {
+  if (muted) return;
+  try {
+    ensureAudio(); if (!actx) return;
+    if (!noiseBuf) {
+      noiseBuf = actx.createBuffer(1, (actx.sampleRate * 0.3) | 0, actx.sampleRate);
+      var d = noiseBuf.getChannelData(0);
+      for (var i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    }
+    var t0 = actx.currentTime + (delay || 0);
+    var src = actx.createBufferSource(); src.buffer = noiseBuf;
+    var f = actx.createBiquadFilter(); f.type = "bandpass"; f.frequency.value = freq || 900; f.Q.value = 0.8;
+    var g = actx.createGain();
+    g.gain.setValueAtTime(gainv || 0.1, t0);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+    src.connect(f); f.connect(g); g.connect(actx.destination);
+    src.start(t0); src.stop(t0 + dur + 0.02);
+  } catch (e) {}
+}
+function sndPop()   { noise(0.07, 0.16, 0, 1400); beep(340, 0.09, "triangle", 0.1, 0, 90); }
+function sndGold()  { beep(660, 0.09, "sine", 0.1); beep(880, 0.09, "sine", 0.1, 0.07); beep(1320, 0.14, "sine", 0.11, 0.14); }
+function sndSpike() { beep(120, 0.3, "sawtooth", 0.12, 0, 55); noise(0.22, 0.1, 0, 300); }
+function sndChain() { beep(210, 0.22, "square", 0.1, 0, 50); noise(0.3, 0.12, 0, 500); beep(90, 0.3, "sine", 0.12, 0.03, 40); }
+function sndTime()  { beep(880, 0.1, "sine", 0.1); beep(1174, 0.16, "sine", 0.1, 0.09); }
+function sndMiss()  { beep(150, 0.07, "sine", 0.05, 0, 100); }
+function sndClick() { beep(500, 0.06, "square", 0.06); }
+function sndBee()   { beep(230, 0.1, "sawtooth", 0.03); beep(260, 0.1, "sawtooth", 0.03, 0.1); }
+
+// ---------- 生成 ----------
+function spawnBalloon() {
+  var roll = Math.random(), type = "normal";
+  if (roll < 0.06) type = "chain";
+  else if (roll < 0.12) type = "time";
+  else if (roll < 0.20) type = "gold";
+  var r, hue, pts;
+  if (type === "gold")       { r = 20 + Math.random() * 7;  hue = 46;  pts = 5; }
+  else if (type === "chain") { r = 21 + Math.random() * 5;  hue = 12;  pts = 2; }
+  else if (type === "time")  { r = 21 + Math.random() * 5;  hue = 190; pts = 1; }
+  else {
+    var small = Math.random() < 0.45;
+    r = small ? 16 + Math.random() * 7 : 30 + Math.random() * 12;
+    hue = HUES[(Math.random() * HUES.length) | 0];
+    pts = small ? 3 : 1;
+  }
+  var margin = r + 36;
+  balloons.push({
+    x: margin + Math.random() * (W - margin * 2),
+    dx: 0, y: H + r + 30,
+    r: r, hue: hue, pts: pts, type: type,
+    vy: (58 + (42 - r) * 2.6) * (1 + elapsed / 90),
+    swayAmp: 10 + Math.random() * 22,
+    swayT: Math.random() * Math.PI * 2,
+    swaySpd: 1.2 + Math.random() * 1.4,
+    spin: Math.random() * Math.PI * 2
+  });
+}
+function spawnSpike() {
+  var r = 24 + Math.random() * 7;
+  spikes.push({
+    x: r + 30 + Math.random() * (W - (r + 30) * 2),
+    dx: 0, y: H + r + 30, r: r,
+    vy: 40 + Math.random() * 25,
+    rot: Math.random() * Math.PI * 2,
+    swayT: Math.random() * Math.PI * 2
+  });
+}
+function spawnBee() {
+  var dir = Math.random() < 0.5 ? 1 : -1;
+  bees.push({
+    x: dir > 0 ? -30 : W + 30, y: 140 + Math.random() * (H - 300), yy: 0,
+    vx: dir * (110 + Math.random() * 80),
+    wobT: Math.random() * 6
+  });
+  sndBee();
+}
+
+// ---------- 特效 ----------
+function confetti(x, y, color, n) {
+  for (var i = 0; i < n; i++) {
+    var a = Math.random() * Math.PI * 2, s = 60 + Math.random() * 160;
+    parts.push({
+      x: x, y: y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 60,
+      rot: Math.random() * 6.28, vr: (Math.random() - 0.5) * 12,
+      life: 0.55 + Math.random() * 0.3, max: 0.85,
+      color: Math.random() < 0.25 ? "#ffffff" : color,
+      w: 3 + Math.random() * 4, h: 2 + Math.random() * 3
+    });
+  }
+}
+function puffFX(x, y, color, n) {
+  for (var i = 0; i < n; i++) {
+    var a = Math.random() * Math.PI * 2, s = 30 + Math.random() * 90;
+    parts.push({ x: x, y: y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, rot: 0, vr: 0, life: 0.4, max: 0.4, color: color, w: 4 + Math.random() * 3, h: 4 + Math.random() * 3 });
+  }
+}
+function popRing(x, y, r, color) { rings.push({ x: x, y: y, r: r * 0.6, vr: 260, life: 0.25, max: 0.25, color: color }); }
+function floatText(x, y, text, color, size) { floats.push({ x: x, y: y, text: text, color: color, life: 0.9, size: size || 16 }); }
+
+// ---------- 得分 ----------
+function bumpCombo() {
+  combo++;
+  if (combo > gameBestCombo) gameBestCombo = combo;
+  if (combo > bestCombo) {
+    bestCombo = combo;
+    try { localStorage.setItem("bp_bestCombo", String(bestCombo)); } catch (e) {}
+  }
+  mult = Math.min(3, 1 + ((combo / 5) | 0));
+  el("combo").textContent = "×" + mult;
+}
+function addScore(gain, x, y, color, big) {
+  score += gain;   // 基础分与乘数均为整数，计分不漂移
+  el("score").textContent = String(score);
+  if (score > best) {
+    best = score;
+    try { localStorage.setItem("bp_best", String(best)); } catch (e) {}
+    el("best").textContent = String(best);
+  }
+  floatText(x, y - 14, "+" + gain, color, big ? 22 : 16);
+}
+
+// 戳破一只气球（cause: "tap" | "blast"）
+function popBalloon(idx) {
+  var b = balloons[idx];
+  balloons.splice(idx, 1);
+  var mid = "hsl(" + b.hue + ",85%,60%)";
+  bumpCombo();
+  if (b.type === "time") {
+    timeLeft += 3;
+    addScore(b.pts * mult, b.dx, b.y, "#0fb5c9", true);
+    confetti(b.dx, b.y, "hsl(190,90%,65%)", 12);
+    popRing(b.dx, b.y, b.r, "hsl(190,90%,65%)");
+    floatText(b.dx, b.y - b.r - 8, "+3s", "#0fb5c9", 20);
+    sndTime();
+  } else if (b.type === "chain") {
+    addScore(b.pts * mult, b.dx, b.y, mid, false);
+    confetti(b.dx, b.y, mid, 14);
+    popRing(b.dx, b.y, b.r, mid);
+    blasts.push({ x: b.dx, y: b.y, r: 92, t: 3 });
+    sndChain();
+  } else {
+    addScore(b.pts * mult, b.dx, b.y, b.type === "gold" ? "#ffb400" : mid, b.type === "gold");
+    confetti(b.dx, b.y, mid, 12);
+    popRing(b.dx, b.y, b.r, mid);
+    if (b.type === "gold") sndGold(); else sndPop();
+  }
+}
+// 戳到刺球：-5 分 + 屏幕震动
+function hitSpike(idx) {
+  var s = spikes[idx];
+  spikes.splice(idx, 1);
+  score = Math.max(0, score - 5);
+  el("score").textContent = String(score);
+  shakeT = 0.5;
+  floatText(s.dx, s.y - 20, "-5", "#ff3b30", 22);
+  puffFX(s.dx, s.y, "#3a4158", 14);
+  sndSpike();
+}
+
+// ---------- 命中判定（半径宽容：球半径 × 1.15） ----------
+function popAt(x, y) {
+  if (state !== "PLAY") return false;
+  var i, b, dx, dy, d2, rr, bestI = -1, bestD = 1e18;
+  for (i = 0; i < balloons.length; i++) {
+    b = balloons[i];
+    dx = b.dx - x; dy = b.y - y; d2 = dx * dx + dy * dy;
+    rr = b.r * 1.15;
+    if (d2 < rr * rr && d2 < bestD) { bestD = d2; bestI = i; }
+  }
+  if (bestI >= 0) { popBalloon(bestI); return true; }
+  for (i = 0; i < spikes.length; i++) {
+    var s = spikes[i];
+    dx = s.dx - x; dy = s.y - y;
+    rr = s.r * 1.15;
+    if (dx * dx + dy * dy < rr * rr) { hitSpike(i); return true; }
+  }
+  // 蜜蜂不可戳：点在蜜蜂上视为有效操作，不惩罚连击
+  for (i = 0; i < bees.length; i++) {
+    var bee = bees[i];
+    dx = bee.x - x; dy = bee.yy - y;
+    if (dx * dx + dy * dy < 16 * 16) return true;
+  }
+  return false;
+}
+
+// ---------- 更新 ----------
+function updateWorld(dt) {
+  var i, j, b;
+  for (i = balloons.length - 1; i >= 0; i--) {
+    b = balloons[i];
+    b.y -= b.vy * dt;
+    b.swayT += b.swaySpd * dt;
+    b.dx = b.x + Math.sin(b.swayT) * b.swayAmp;
+    b.spin += 0.5 * dt;
+    if (b.y < -b.r - 60) balloons.splice(i, 1);   // 飞出顶部：无惩罚
+  }
+  for (i = spikes.length - 1; i >= 0; i--) {
+    var s = spikes[i];
+    s.y -= s.vy * dt; s.rot += 0.8 * dt; s.swayT += dt;
+    s.dx = s.x + Math.sin(s.swayT) * 8;
+    if (s.y < -s.r - 40) spikes.splice(i, 1);
+  }
+  for (i = bees.length - 1; i >= 0; i--) {
+    var bee = bees[i];
+    bee.x += bee.vx * dt; bee.wobT += dt * 9;
+    bee.yy = bee.y + Math.sin(bee.wobT) * 10;
+    if (bee.x < -60 || bee.x > W + 60) { bees.splice(i, 1); continue; }
+  }
+  for (i = parts.length - 1; i >= 0; i--) {
+    var p = parts[i];
+    p.life -= dt;
+    if (p.life <= 0) { parts.splice(i, 1); continue; }
+    p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 320 * dt; p.rot += p.vr * dt;
+  }
+  for (i = rings.length - 1; i >= 0; i--) {
+    var rg = rings[i];
+    rg.life -= dt; rg.r += rg.vr * dt;
+    if (rg.life <= 0) rings.splice(i, 1);
+  }
+  for (i = floats.length - 1; i >= 0; i--) {
+    var f = floats[i];
+    f.life -= dt; f.y -= 46 * dt;
+    if (f.life <= 0) floats.splice(i, 1);
+  }
+  if (shakeT > 0) shakeT -= dt;
+}
+function updateGame(dt) {
+  elapsed += dt;
+  timeLeft -= dt;
+  if (timeLeft <= 0) { timeLeft = 0; endGame(); return; }
+  var i, k;
+  spawnT -= dt;
+  if (spawnT <= 0) { spawnBalloon(); spawnT = Math.max(0.32, 0.62 - elapsed * 0.005); }
+  spikeT -= dt;
+  if (spikeT <= 0) { spawnSpike(); spikeT = 5.5 + Math.random() * 4; }
+  beeT -= dt;
+  if (beeT <= 0) { spawnBee(); beeT = 7 + Math.random() * 5; }
+  // 蜜蜂蛰气球：气球被戳爆且分归零（不计分、不影响玩家连击）
+  for (i = bees.length - 1; i >= 0; i--) {
+    var bee = bees[i];
+    for (var j = balloons.length - 1; j >= 0; j--) {
+      var bb = balloons[j];
+      var ddx = bb.dx - bee.x, ddy = bb.y - bee.yy;
+      var rr = bb.r * 0.9 + 12;
+      if (ddx * ddx + ddy * ddy < rr * rr) {
+        puffFX(bb.dx, bb.y, "hsl(" + bb.hue + ",70%,82%)", 6);
+        balloons.splice(j, 1);
+        break;
+      }
+    }
+  }
+  // 连锁冲击区：3 秒内进入的气球全部引爆（刺球被安全清除）
+  for (i = blasts.length - 1; i >= 0; i--) {
+    var bl = blasts[i];
+    bl.t -= dt;
+    if (bl.t <= 0) { blasts.splice(i, 1); continue; }
+    for (k = balloons.length - 1; k >= 0; k--) {
+      var bc = balloons[k];
+      var dx2 = bc.dx - bl.x, dy2 = bc.y - bl.y;
+      if (dx2 * dx2 + dy2 * dy2 < bl.r * bl.r) popBalloon(k);
+    }
+    for (k = spikes.length - 1; k >= 0; k--) {
+      var sc = spikes[k];
+      var dx3 = sc.dx - bl.x, dy3 = sc.y - bl.y;
+      if (dx3 * dx3 + dy3 * dy3 < bl.r * bl.r) { puffFX(sc.dx, sc.y, "#56607a", 8); spikes.splice(k, 1); }
+    }
+  }
+}
+
+// ---------- 渲染 ----------
+var tick = 0;
+function drawCloud(c) {
+  ctx.fillStyle = "rgba(255,255,255,.85)";
+  ctx.beginPath();
+  ctx.arc(c.x, c.y, 18 * c.s, 0, Math.PI * 2);
+  ctx.arc(c.x + 20 * c.s, c.y - 8 * c.s, 14 * c.s, 0, Math.PI * 2);
+  ctx.arc(c.x + 38 * c.s, c.y, 16 * c.s, 0, Math.PI * 2);
+  ctx.arc(c.x + 18 * c.s, c.y + 6 * c.s, 15 * c.s, 0, Math.PI * 2);
+  ctx.fill();
+}
+function star(x, y, n, R, r2) {
+  ctx.beginPath();
+  for (var i = 0; i < n * 2; i++) {
+    var ang = i * Math.PI / n - Math.PI / 2;
+    var rad = i % 2 === 0 ? R : r2;
+    if (i === 0) ctx.moveTo(x + Math.cos(ang) * rad, y + Math.sin(ang) * rad);
+    else ctx.lineTo(x + Math.cos(ang) * rad, y + Math.sin(ang) * rad);
+  }
+  ctx.closePath(); ctx.fill();
+}
+function drawBalloon(b) {
+  var x = b.dx, y = b.y, r = b.r;
+  var light = "hsl(" + b.hue + ",95%,78%)";
+  var mid = "hsl(" + b.hue + ",85%,60%)";
+  var dark = "hsl(" + b.hue + ",80%,42%)";
+  // 摆动绳子
+  ctx.strokeStyle = "rgba(30,60,100,.45)"; ctx.lineWidth = 1.5;
+  var sw = Math.sin(b.swayT) * 12;
+  ctx.beginPath();
+  ctx.moveTo(x, y + r * 1.14);
+  ctx.quadraticCurveTo(x + sw, y + r * 1.14 + 20, x - sw * 0.6, y + r * 1.14 + 40);
+  ctx.stroke();
+  // 球体（发光 + 高光）
+  ctx.shadowColor = mid; ctx.shadowBlur = b.type === "gold" ? 22 : 14;
+  var g = ctx.createRadialGradient(x - r * 0.35, y - r * 0.4, r * 0.12, x, y, r * 1.18);
+  g.addColorStop(0, light); g.addColorStop(0.55, mid); g.addColorStop(1, dark);
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.ellipse(x, y, r * 0.92, r * 1.06, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.shadowBlur = 0;
+  // 结
+  ctx.fillStyle = dark;
+  ctx.beginPath();
+  ctx.moveTo(x, y + r * 1.02);
+  ctx.lineTo(x - 4.5, y + r * 1.18);
+  ctx.lineTo(x + 4.5, y + r * 1.18);
+  ctx.closePath(); ctx.fill();
+  // 高光
+  ctx.fillStyle = "rgba(255,255,255,.55)";
+  ctx.beginPath(); ctx.ellipse(x - r * 0.32, y - r * 0.42, r * 0.26, r * 0.16, -0.6, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "rgba(255,255,255,.32)";
+  ctx.beginPath(); ctx.ellipse(x + r * 0.3, y + r * 0.2, r * 0.12, r * 0.08, 0.6, 0, Math.PI * 2); ctx.fill();
+  // 类型标记
+  if (b.type === "gold") {
+    var tw = 0.55 + 0.45 * Math.sin(tick * 6 + b.spin);
+    ctx.fillStyle = "rgba(255,255,255," + tw.toFixed(2) + ")";
+    star(x + r * 0.35, y - r * 0.3, 4, r * 0.24, r * 0.09);
+  } else if (b.type === "time") {
+    ctx.fillStyle = "#083b4a";
+    ctx.font = "900 " + Math.round(r * 0.5) + "px sans-serif";
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText("+3s", x, y + 1);
+  } else if (b.type === "chain") {
+    ctx.strokeStyle = "rgba(255,255,255,.92)"; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(x, y, r * (0.62 + 0.06 * Math.sin(tick * 7)), 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = "#fff";
+    ctx.beginPath(); ctx.arc(x, y, r * 0.18, 0, Math.PI * 2); ctx.fill();
+  }
+}
+function drawSpike(s) {
+  ctx.save();
+  ctx.translate(s.dx, s.y);
+  ctx.rotate(s.rot);
+  ctx.fillStyle = "#454e66";
+  ctx.beginPath();
+  var n = 11;
+  for (var i = 0; i < n; i++) {
+    var a1 = i / n * Math.PI * 2;
+    var a2 = (i + 0.5) / n * Math.PI * 2;
+    ctx.lineTo(Math.cos(a1) * (s.r + 9), Math.sin(a1) * (s.r + 9));
+    ctx.lineTo(Math.cos(a2) * s.r * 0.85, Math.sin(a2) * s.r * 0.85);
+  }
+  ctx.closePath(); ctx.fill();
+  var g = ctx.createRadialGradient(-s.r * 0.3, -s.r * 0.3, s.r * 0.2, 0, 0, s.r);
+  g.addColorStop(0, "#4b5470"); g.addColorStop(1, "#1c2233");
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(0, 0, s.r * 0.85, 0, Math.PI * 2); ctx.fill();
+  ctx.shadowColor = "#ff2b2b"; ctx.shadowBlur = 8;
+  ctx.fillStyle = "#ff4040";
+  ctx.beginPath(); ctx.arc(-s.r * 0.28, -s.r * 0.1, s.r * 0.13, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(s.r * 0.28, -s.r * 0.1, s.r * 0.13, 0, Math.PI * 2); ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.restore();
+}
+function drawBee(b) {
+  var dir = b.vx > 0 ? 1 : -1;
+  ctx.save();
+  ctx.translate(b.x, b.yy);
+  ctx.scale(dir, 1);
+  var flap = Math.sin(tick * 30) * 0.6;
+  ctx.fillStyle = "rgba(255,255,255,.78)";
+  ctx.save(); ctx.rotate(-0.5 + flap * 0.3);
+  ctx.beginPath(); ctx.ellipse(-2, -10, 9, 5, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+  ctx.save(); ctx.rotate(0.2 + flap * 0.2);
+  ctx.beginPath(); ctx.ellipse(4, -9, 7, 4, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+  ctx.fillStyle = "#ffd23e";
+  ctx.strokeStyle = "#2b2b2b"; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.ellipse(0, 0, 13, 9, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = "#2b2b2b";
+  ctx.beginPath(); ctx.ellipse(-2, 0, 2.5, 8, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(4, 0, 2.5, 7, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#fff";
+  ctx.beginPath(); ctx.arc(9, -2.5, 3, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#222";
+  ctx.beginPath(); ctx.arc(10, -2.5, 1.4, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#2b2b2b";
+  ctx.beginPath(); ctx.moveTo(-13, 0); ctx.lineTo(-19, -2); ctx.lineTo(-13, 3); ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+var clouds = [];
+function initClouds() {
+  clouds = [];
+  for (var i = 0; i < 5; i++) {
+    clouds.push({ x: Math.random() * W, y: 40 + Math.random() * (H - 240), s: 0.7 + Math.random() * 0.9, spd: 6 + Math.random() * 10 });
+  }
+}
+function render() {
+  ctx.save();
+  if (shakeT > 0) {
+    var mag = shakeT * 14;
+    ctx.translate((Math.random() * 2 - 1) * mag, (Math.random() * 2 - 1) * mag);
+  }
+  var sky = ctx.createLinearGradient(0, 0, 0, H);
+  sky.addColorStop(0, "#4da7e8"); sky.addColorStop(0.6, "#8fd0ff"); sky.addColorStop(1, "#d8f0ff");
+  ctx.fillStyle = sky;
+  ctx.fillRect(-24, -24, W + 48, H + 48);
+  // 太阳
+  var sun = ctx.createRadialGradient(W - 70, 84, 10, W - 70, 84, 74);
+  sun.addColorStop(0, "rgba(255,242,190,.95)"); sun.addColorStop(1, "rgba(255,242,190,0)");
+  ctx.fillStyle = sun;
+  ctx.fillRect(W - 154, 0, 168, 168);
+  for (var ci = 0; ci < clouds.length; ci++) drawCloud(clouds[ci]);
+  // 连锁冲击圈
+  for (var i = 0; i < blasts.length; i++) {
+    var bl = blasts[i];
+    var a = Math.min(1, bl.t / 0.4) * 0.55;
+    ctx.strokeStyle = "rgba(255,120,40," + a.toFixed(3) + ")";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(bl.x, bl.y, bl.r * (0.72 + 0.1 * Math.sin(tick * 8)), 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  // 冲击波圆环
+  for (i = 0; i < rings.length; i++) {
+    var rg = rings[i];
+    ctx.globalAlpha = Math.max(0, rg.life / rg.max) * 0.8;
+    ctx.strokeStyle = rg.color; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(rg.x, rg.y, rg.r, 0, Math.PI * 2); ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+  var i2;
+  for (i2 = 0; i2 < balloons.length; i2++) drawBalloon(balloons[i2]);
+  for (i2 = 0; i2 < spikes.length; i2++) drawSpike(spikes[i2]);
+  for (i2 = 0; i2 < bees.length; i2++) drawBee(bees[i2]);
+  // 彩纸粒子
+  for (i2 = 0; i2 < parts.length; i2++) {
+    var p = parts[i2];
+    ctx.globalAlpha = Math.max(0, Math.min(1, p.life / p.max * 1.4));
+    ctx.save();
+    ctx.translate(p.x, p.y); ctx.rotate(p.rot);
+    ctx.fillStyle = p.color;
+    ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+    ctx.restore();
+  }
+  ctx.globalAlpha = 1;
+  // 浮动文字
+  for (i2 = 0; i2 < floats.length; i2++) {
+    var f = floats[i2];
+    ctx.globalAlpha = Math.max(0, Math.min(1, f.life / 0.35));
+    ctx.font = "900 " + f.size + "px sans-serif";
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = "rgba(10,40,70,.4)";
+    ctx.strokeText(f.text, f.x, f.y);
+    ctx.fillStyle = f.color;
+    ctx.fillText(f.text, f.x, f.y);
+    ctx.globalAlpha = 1;
+  }
+  ctx.restore();
+}
+
+// ---------- 主循环 ----------
+var last = 0;
+function frame(t) {
+  var dt = Math.min((t - last) / 1000, 0.05);
+  last = t;
+  tick += dt;
+  for (var i = 0; i < clouds.length; i++) {
+    clouds[i].x += clouds[i].spd * dt;
+    if (clouds[i].x > W + 90) clouds[i].x = -90;
+  }
+  if (state === "PLAY") {
+    updateGame(dt);
+    el("time").textContent = String(Math.ceil(timeLeft));
+    el("time").style.color = timeLeft <= 10 ? "#e03131" : "#12365c";
+  } else {
+    // 菜单/结算背景飘环境气球
+    ambientT -= dt;
+    if (ambientT <= 0 && balloons.length < 6) { spawnBalloon(); ambientT = 1; }
+  }
+  updateWorld(dt);
+  render();
+  requestAnimationFrame(frame);
+}
+
+// ---------- 流程 ----------
+function startGame() {
+  score = 0; combo = 0; mult = 1; gameBestCombo = 0;
+  timeLeft = 60; elapsed = 0; prevBest = best;
+  balloons = []; spikes = []; bees = []; blasts = []; parts = []; floats = []; rings = [];
+  spawnT = 0.4; spikeT = 5; beeT = 9; shakeT = 0; ambientT = 1;
+  el("score").textContent = "0";
+  el("combo").textContent = "×1";
+  el("time").textContent = "60";
+  el("time").style.color = "#12365c";
+  el("overlay").classList.add("hidden");
+  state = "PLAY";
+  portalStart();
+  sndClick();
+}
+function endGame() {
+  state = "OVER";
+  popping = false;
+  var isNew = score > prevBest && score > 0;
+  el("finalScore").textContent = String(score);
+  el("newBest").style.display = isNew ? "inline-block" : "none";
+  el("overStats").textContent = "Best combo: " + gameBestCombo + " (×" + Math.min(3, 1 + ((gameBestCombo / 5) | 0)) + ") · All-time best combo: " + bestCombo;
+  el("overBest").textContent = String(best);
+  el("menuPanel").style.display = "none";
+  el("overPanel").style.display = "block";
+  el("overlay").classList.remove("hidden");
+  portalStop(isNew);
+  sndClick();
+}
+
+// ---------- 输入（桌面鼠标 + 移动触控，支持按住滑动连戳） ----------
+var popping = false, lastX = 0, lastY = 0;
+function toXY(clientX, clientY) {
+  var rect = canvas.getBoundingClientRect();
+  return { x: (clientX - rect.left) / rect.width * W, y: (clientY - rect.top) / rect.height * H };
+}
+function tapAt(x, y) {
+  if (state !== "PLAY") return;
+  if (!popAt(x, y)) {           // 点空：连击清零
+    if (combo > 0) sndMiss();
+    combo = 0; mult = 1;
+    el("combo").textContent = "×1";
+  }
+}
+function swipeTo(x, y) {
+  var dx = x - lastX, dy = y - lastY;
+  var dist = Math.sqrt(dx * dx + dy * dy);
+  var steps = Math.max(1, Math.ceil(dist / 12));
+  for (var i = 1; i <= steps; i++) popAt(lastX + dx * i / steps, lastY + dy * i / steps);
+  lastX = x; lastY = y;
+}
+canvas.addEventListener("mousedown", function (e) {
+  ensureAudio();
+  var p = toXY(e.clientX, e.clientY);
+  lastX = p.x; lastY = p.y; popping = true;
+  tapAt(p.x, p.y);
+});
+canvas.addEventListener("mousemove", function (e) {
+  if (!popping || state !== "PLAY") return;
+  var p = toXY(e.clientX, e.clientY);
+  swipeTo(p.x, p.y);
+});
+window.addEventListener("mouseup", function () { popping = false; });
+canvas.addEventListener("touchstart", function (e) {
+  e.preventDefault();
+  ensureAudio();
+  if (e.touches.length !== 1) return;   // 多点触控：只处理主指针
+  var t = e.touches[0];
+  var p = toXY(t.clientX, t.clientY);
+  lastX = p.x; lastY = p.y; popping = true;
+  tapAt(p.x, p.y);
+}, { passive: false });
+canvas.addEventListener("touchmove", function (e) {
+  e.preventDefault();
+  if (!popping || e.touches.length !== 1) return;
+  var t = e.touches[0];
+  var p = toXY(t.clientX, t.clientY);
+  swipeTo(p.x, p.y);
+}, { passive: false });
+canvas.addEventListener("touchend", function (e) {
+  e.preventDefault();
+  if (e.touches.length === 0) popping = false;
+}, { passive: false });
+canvas.addEventListener("touchcancel", function () { popping = false; });
+canvas.addEventListener("contextmenu", function (e) { e.preventDefault(); });
+document.addEventListener("keydown", function (e) {
+  if ((e.key === "Enter" || e.key === " ") && state !== "PLAY") { e.preventDefault(); startGame(); }
+});
+
+el("playBtn").addEventListener("click", function () { ensureAudio(); startGame(); });
+el("againBtn").addEventListener("click", function () { ensureAudio(); startGame(); });
+function toggleMute() {
+  muted = !muted;
+  try { localStorage.setItem("bp_muted", muted ? "1" : "0"); } catch (e) {}
+  el("muteBtn").textContent = muted ? "SOUND OFF" : "SOUND ON";
+  if (!muted) { ensureAudio(); sndClick(); }
+}
+el("muteBtn").addEventListener("click", function (e) { e.stopPropagation(); toggleMute(); });
+el("muteBtn").textContent = muted ? "SOUND OFF" : "SOUND ON";
+
+// ---------- 初始化 ----------
+el("best").textContent = String(best);
+el("menuBest").textContent = String(best);
+initClouds();
+fit();
+requestAnimationFrame(frame);
+// 调试/测试钩子（不影响游戏逻辑）
+window.__bp = {
+  get score() { return score; },
+  get state() { return state; },
+  get combo() { return combo; },
+  get time() { return Math.ceil(timeLeft); },
+  get balloons() { return balloons.length; },
+  get best() { return best; }
+};
+</script>
+</body>
+</html>
