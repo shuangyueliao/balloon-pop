@@ -2,7 +2,7 @@
 
 ## Short description (CrazyGames / GameDistribution / itch.io)
 
-Pop rising balloons before they float away! Big 1pt, small 3pt, gold 5pt, chain blasts, +3s clocks, spike balls and bees. Swipe for combos up to x3 in 60 seconds of fun.
+Pop rising balloons before they float away! Big 1pt, small 3pt, gold 5pt, chain blasts, +3s clocks, spikes and bees. Swipe combos up to x3 in 60s of fun.
 
 ## Details
 
